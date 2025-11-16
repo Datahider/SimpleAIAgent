@@ -1,3 +1,4 @@
 /vendor/
 /etc/
 /nbproject/
+/composer.lock
