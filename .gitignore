@@ -2,3 +2,4 @@
 /etc/
 /nbproject/
 /composer.lock
+/test/secrets.php

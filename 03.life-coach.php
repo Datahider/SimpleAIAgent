@@ -10,7 +10,6 @@ require 'etc/config.php';
 DB::connect($db_host, $db_user, $db_pass, $db_name, $db_prefix);
 
 $agent = SimpleAIAgent::build($deepseek_api_key)
-        ->setAgentName('life coach')
         ->setUserId(1)
         ->setDialogId(2)
         ->setTimeout(1)

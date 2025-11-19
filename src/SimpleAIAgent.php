@@ -9,21 +9,29 @@ use losthost\DB\DBView;
 
 class SimpleAIAgent {
 
+    const DEFAULT_PROMPT = '';
+    const DEFAULT_TEMPERATURE = 1.0;
+    const DEFAULT_TIMEOUT = 30;
+    
     protected string $deepseek_api_key;
     
     protected string $user_id;
-    protected string $agent_name;
     protected string $dialog_id;
 
     protected bool $logging;
     protected int $timeout;
     
-    static protected array $prompt_for_agent = [];
+    protected string $prompt;
+    protected float $temperature;
+    protected array $functions = [];
+
 
     public function __construct(string $deepseek_api_key) {
         $this->deepseek_api_key = $deepseek_api_key;
         $this->logging = false;
-        $this->timeout = 30;
+        $this->timeout = static::DEFAULT_TIMEOUT;
+        $this->prompt = static::DEFAULT_PROMPT;
+        $this->temperature = static::DEFAULT_TEMPERATURE;
         $this->dialog_id = '';
         $this->agent_name = '';
         
@@ -33,39 +41,35 @@ class SimpleAIAgent {
         return new static($deepseek_api_key);
     }
 
+    public function addFunction(SimpleAIFunction $function) : static {
+        $this->functions[] = $function;
+    }
+    
     public function setPrompt(string $prompt) : static {
-        if (!isset($this->agent_name)) {
-            $this->throw('Agent name is not set', __FILE__, __LINE__);
-        }
-        
-        static::$prompt_for_agent[$this->agent_name] = $prompt;
-        $this->log("Prompt for $this->agent_name is set");
+        $this->prompt = $prompt;
         return $this;
     }
     
-    public function getPrompt() : string {
-        if (!isset($this->agent_name)) {
-            $this->throw('Agent name is not set', __FILE__, __LINE__);
-        }
-        
-        return static::$prompt_for_agent[$this->agent_name] ?? '';
-    }
-    
-    public function setUserId(string $user_id) : static {
-        $this->user_id = $user_id;
-        $this->log("User id is set to \"$this->user_id\"");
-        return $this;
-    }
-    
-    public function setAgentName(string $agent_name) : static {
-        $this->agent_name = $agent_name;
-        $this->log("Agent name is set to \"$this->agent_name\"");
-        return $this;
+    public function getPrompt(): string {
+        return $this->prompt; 
     }
 
+    public function setTemperature(float $temperature) : static {
+        $this->temperature = $temperature;
+        return $this;
+    }
+    
+    public function getTemperature(): float {
+        return $this->temperature;
+    }
+
+    public function setUserId(string $user_id) : static {
+        $this->user_id = $user_id;
+        return $this;
+    }
+    
     public function setDialogId(string $dialog_id) : static {
         $this->dialog_id = $dialog_id;
-        $this->log("Dialog id is set to \"$this->dialog_id\"");
         return $this;
     }
 
@@ -97,6 +101,8 @@ class SimpleAIAgent {
     
     protected function simpleQuery(string $query) {
         $response = DeepSeekClient::build(apiKey: $this->deepseek_api_key, timeout: $this->timeout)
+                ->setTemperature($this->getTemperature())
+                ->query($this->getPrompt(), 'system')
                 ->query($query)
                 ->run();
         return $this->getResponseContent($response);
@@ -118,7 +124,7 @@ class SimpleAIAgent {
     }
     
     protected function storeAnswer(string $answer) : void {
-        Context::add($this->user_id, $this->agent_name, $this->dialog_id, 'assistant', $answer);
+        Context::add($this->user_id, $this->dialog_id, 'assistant', $answer);
     }
     
     protected function getContext($query) {
@@ -128,15 +134,15 @@ class SimpleAIAgent {
         } 
         
         if ($query) {
-            Context::add($this->user_id, $this->agent_name, $this->dialog_id, 'user', $query);
+            Context::add($this->user_id, $this->dialog_id, 'user', $query);
         } // Пустой ввод не добавляем в контекст
         
         $context_view = new DBView(<<<FIN
                 SELECT role, content 
                 FROM [sai_context] 
-                WHERE user_id = ? AND agent_name = ? AND dialog_id = ? 
+                WHERE user_id = ? AND dialog_id = ? 
                 ORDER BY id
-                FIN, [$this->user_id, $this->agent_name, $this->dialog_id]);
+                FIN, [$this->user_id, $this->dialog_id]);
         
         $context = [];
         while ($context_view->next()) {
@@ -151,8 +157,8 @@ class SimpleAIAgent {
         $context = new DBValue(<<<FIN
                 SELECT COUNT(*) AS messages 
                 FROM [sai_context] 
-                WHERE user_id = ? AND agent_name = ? AND dialog_id = ? 
-                FIN, [$this->user_id, $this->agent_name, $this->dialog_id]);
+                WHERE user_id = ? AND dialog_id = ? 
+                FIN, [$this->user_id, $this->dialog_id]);
 
         return (bool)$context->messages;
     }
@@ -160,7 +166,7 @@ class SimpleAIAgent {
     protected function makeContext() {
         $prompt = $this->getPrompt();
         if (!empty($prompt)) {
-            Context::add($this->user_id, $this->agent_name, $this->dialog_id, 'system', $prompt);
+            Context::add($this->user_id, $this->dialog_id, 'system', $prompt);
         }
     }
     
