@@ -7,9 +7,9 @@ use losthost\SimpleAI\data\Context;
 require 'vendor/autoload.php';
 require 'etc/config.php';
 
-DB::connect($db_host, $db_user, $db_pass, $db_name, $db_prefix);
+DB::connect(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PREFIX);
 
-$agent = SimpleAIAgent::build($deepseek_api_key)
+$agent = SimpleAIAgent::build(DEEPSEEK_API_KEY)
         ->setUserId(1)
         ->setDialogId(2)
         ->setTimeout(1)

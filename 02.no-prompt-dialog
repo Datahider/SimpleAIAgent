@@ -8,9 +8,9 @@ require 'vendor/autoload.php';
 require 'etc/config.php'; // set $deepseek_api_key and $db_* vars
 
 // SimpleAIAgent uses losthost\DB\DB to access it's database
-DB::connect($db_host, $db_user, $db_pass, $db_name, $db_prefix);
+DB::connect(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PREFIX);
 
-$agent = SimpleAIAgent::build($deepseek_api_key)
+$agent = SimpleAIAgent::build(DEEPSEEK_API_KEY)
         ->setUserId(1)
         ->setTimeout(180);
 
