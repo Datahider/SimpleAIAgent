@@ -4,7 +4,7 @@ namespace losthost\SimpleAI\Test;
 
 use PHPUnit\Framework\TestCase;
 use losthost\SimpleAI\SimpleAIAgent;
-use losthost\SimpleAI\data\Context;
+use losthost\SimpleAI\data\DBContext;
 use losthost\DB\DB;
 
 class SimpleAIAgentTest extends TestCase

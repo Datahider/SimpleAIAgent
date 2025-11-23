@@ -3,9 +3,15 @@
 namespace losthost\SimpleAI;
 
 use DeepSeek\DeepSeekClient;
-use losthost\SimpleAI\data\Context;
+use losthost\SimpleAI\data\DBContext;
+use losthost\SimpleAI\types\Context;
+use losthost\SimpleAI\types\ContextItem;
 use losthost\DB\DBValue;
 use losthost\DB\DBView;
+use losthost\SimpleAI\types\Response;
+use losthost\SimpleAI\data\DBStatistics;
+use losthost\SimpleAI\types\Tools;
+use losthost\SimpleAI\types\abstract\AbstractAITool;
 
 class SimpleAIAgent {
 
@@ -23,7 +29,7 @@ class SimpleAIAgent {
     
     protected string $prompt;
     protected float $temperature;
-    protected array $functions = [];
+    protected Tools $tools;
 
 
     public function __construct(string $deepseek_api_key) {
@@ -34,6 +40,7 @@ class SimpleAIAgent {
         $this->temperature = static::DEFAULT_TEMPERATURE;
         $this->dialog_id = '';
         $this->agent_name = '';
+        $this->tools = Tools::create();
         
     }
     
@@ -73,7 +80,7 @@ class SimpleAIAgent {
         return $this;
     }
 
-    public function ask(?string $query=null, bool|string|callable $handle_errors=false) {
+    public function ask(?string $query=null, bool|string|callable $handle_errors=false) : Context {
     
         try {
             return $this->dispatchQuery($query);
@@ -81,17 +88,21 @@ class SimpleAIAgent {
             if ($handle_errors === false) {
                 throw $ex;
             } elseif ($handle_errors === true) {
-                return $ex->getMessage();
+                return Context::create()
+                        ->add(ContextItem::create($ex->getMessage(), ContextItem::ROLE_ERROR));
             } elseif (is_callable($handle_errors)) {
                 $answer = $handle_errors($ex);
-                return $answer;
+                return is_string($answer) 
+                        ? Context::create()
+                            ->add(ContextItem::create($answer, ContextItem::ROLE_ERROR))
+                        : $answer;
             } elseif (is_string($handle_errors)) {
-                return $handle_errors;
+                return Context::create()->add(ContextItem::create($handle_errors, ContextItem::ROLE_ERROR));
             }
         }
     }
 
-    protected function dispatchQuery(?string $query) : string {
+    protected function dispatchQuery(?string $query) : Context {
         if (empty($this->user_id)) {
             return $this->simpleQuery($query);
         } else {
@@ -99,61 +110,126 @@ class SimpleAIAgent {
         }
     }
     
-    protected function simpleQuery(string $query) {
-        $response = DeepSeekClient::build(apiKey: $this->deepseek_api_key, timeout: $this->timeout)
-                ->setTemperature($this->getTemperature())
-                ->query($this->getPrompt(), 'system')
-                ->query($query)
-                ->run();
-        return $this->getResponseContent($response);
+    protected function simpleQuery(string $query) : Context  {
+        
+        $context = Context::create([
+                ContextItem::create($this->getPrompt(), ContextItem::ROLE_SYSTEM),
+                ContextItem::create($query)
+        ]);
+        
+        $answer_context = Context::create();
+        $this->processContext($context, $answer_context);
+
+        return $answer_context;
     }
     
-    protected function contextQuery(?string $query) {
+    protected function contextQuery(?string $query) : Context {
         
-        $agent = DeepSeekClient::build(apiKey: $this->deepseek_api_key, timeout: $this->timeout);
         $context = $this->getContext($query);
+
+        $answer_context = Context::create();
+        $this->processContext($context, $answer_context);
+
+        $this->historyAdd($answer_context);
+
+        return $answer_context;
+    }
+    
+    protected function processContext(Context $history, Context &$new) {
         
-        foreach ($context as $context_item) {
-            $agent->query($context_item['content'], $context_item['role']);
+        $context = Context::create($history->asArray());
+        foreach ($new->asArray() as $item) {
+            $context->add($item);
         }
         
-        $answer = $this->getResponseContent($agent->run());
+        $response = $this->postQuery($context);
+
+        if ($response->hasContent()) {
+            $new->add(ContextItem::create($response->getContent(), ContextItem::ROLE_ASSISTANT));
+        }
         
-        $this->storeAnswer($answer);
-        return $answer;
+        if ($response->hasToolCall()) {
+            
+            foreach ($response->getToolCalls() as $tool_call) {
+                $handler = AbstractAITool::getHandler($tool_call->getName());
+                $result = $handler->execute($tool_call->getArgs());
+                $new->add(ContextItem::create($result->getResult(), ContextItem::ROLE_TOOL, $tool_call->getId()));
+                error_log('Рекурсивный вызов processContext()');
+                $this->processContext($history, $new);
+            }
+        }
+        
     }
     
-    protected function storeAnswer(string $answer) : void {
-        Context::add($this->user_id, $this->dialog_id, 'assistant', $answer);
+    protected function postQuery(Context $context) : Response {
+
+        $agent = DeepSeekClient::build(apiKey: $this->deepseek_api_key, timeout: $this->timeout)
+                ->setTemperature($this->getTemperature());
+        
+        foreach ($context->asArray() as $context_item) {
+            if ($context_item->getToolCallId()) {
+                $agent->queryToolCall($context_item->getToolCall(), '');
+                $agent->queryTool($context_item->getToolCallId(), $context_item->getToolResult());
+            } else {
+                $agent->query($context_item->getContent(), $context_item->getRole());
+            }
+        }
+        
+        $tools = [];
+        foreach ($this->tools->asArray() as $tool) {
+            $tools[] = $tool->getDefinition();
+        }
+        $agent->setTools($tools);
+        
+        $response = Response::fromResponse($agent->run());
+        
+        if ($response->hasError()) {
+            throw new \RuntimeException($response->error->message);
+        }
+        if (isset($this->user_id)) {
+            $this->collectStatistics($response);
+        }
+        
+        return $response;
     }
     
-    protected function getContext($query) {
+    protected function historyAdd(Context $new) : void {
+        foreach ($new->asArray() as $item) {
+            DBContext::add($this->user_id, $this->dialog_id, $item->getRole(), $item->getContent(), $item->getToolCallId());
+        }
+    }
+    
+    protected function getContext($query) : Context {
         
         if (!$this->hasContext()) {
             $this->makeContext();
         } 
         
         if ($query) {
-            Context::add($this->user_id, $this->dialog_id, 'user', $query);
+            DBContext::add($this->user_id, $this->dialog_id, 'user', $query);
         } // Пустой ввод не добавляем в контекст
         
         $context_view = new DBView(<<<FIN
-                SELECT role, content 
+                SELECT role, content, tool_call_id 
                 FROM [sai_context] 
                 WHERE user_id = ? AND dialog_id = ? 
                 ORDER BY id
                 FIN, [$this->user_id, $this->dialog_id]);
         
-        $context = [];
+        $context = new Context();
         while ($context_view->next()) {
-            $context[] = ['role' => $context_view->role, 'content' => $context_view->content];
+            $context->add(
+                    ContextItem::create(
+                        $context_view->content, 
+                        $context_view->role,
+                        $context_view->tool_call_id));
         }
         
         return $context;
     }
     
     protected function hasContext() {
-        Context::initDataStructure();
+        DBContext::initDataStructure();
         $context = new DBValue(<<<FIN
                 SELECT COUNT(*) AS messages 
                 FROM [sai_context] 
@@ -166,11 +242,11 @@ class SimpleAIAgent {
     protected function makeContext() {
         $prompt = $this->getPrompt();
         if (!empty($prompt)) {
-            Context::add($this->user_id, $this->dialog_id, 'system', $prompt);
+            DBContext::add($this->user_id, $this->dialog_id, 'system', $prompt);
         }
     }
     
-    protected function getResponseContent(string $response_json) : string {
+    protected function processResponse(string $response_json) : string {
         if (!$response_json) {
             $this->throw('Empty response from DeepSeek', __FILE__, __LINE__);
         } 
@@ -180,6 +256,40 @@ class SimpleAIAgent {
             $this->throw($response_json, __FILE__, __LINE__);
         }
         
+        $this->collectStatistics($response);
+        $this->callTools($response);
+        return $this->getResponseContent($response);
+        
+    }
+    
+    protected function collectStatistics(Response $response) : void {
+        
+        DBStatistics::add(
+            $response->getId(), 
+            $response->getCreated(), 
+            $this->user_id, 
+            $this->dialog_id, 
+            $response->getPromptTokens(), 
+            $response->getCompletionTokens());
+    }
+    
+    public function addTool(AbstractAITool $tool) : static {
+        $this->tools->add($tool);
+        return $this;
+    }
+    
+    protected function callTools(Response &$response) {
+        error_log(__FUNCTION__. ' is not implemented yet');
+        // Анализ и вызов функции, 
+        // добавление результата в контекст и отправка нового запроса
+        // после получения ответа вызов аналога processResponse
+        // нужны проверки, статистика и возврат значения, но эта функция не возвращает
+        // а должна модифицировать $response/ 
+        
+        // Вероятно нужно изменить дизайн
+    }
+    
+    protected function getResponseContent(\stdClass $response) : string {
         if (empty($response->choices)) {
             $this->log($response);
             $this->throw("No choices in DeepSeek's response", __FILE__, __LINE__);

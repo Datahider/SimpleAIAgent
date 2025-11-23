@@ -5,12 +5,13 @@ namespace losthost\SimpleAI\data;
 use losthost\DB\DBObject;
 use losthost\DB\DB;
 
-class Context extends DBObject {
+class DBContext extends DBObject {
     const METADATA = [
         'id' => 'BIGINT NOT NULL AUTO_INCREMENT',
         'user_id' => 'VARCHAR(50) NOT NULL',
         'dialog_id' => 'VARCHAR(50) NOT NULL',
-        'role' => 'ENUM("system", "user", "assistant")',
+        'role' => 'ENUM("system", "user", "assistant", "tool")',
+        'tool_call_id' => 'VARCHAR(50)',
         'content' => 'TEXT',
         'date_time' => 'DATETIME NOT NULL',
         'PRIMARY KEY' => 'id',
@@ -21,13 +22,14 @@ class Context extends DBObject {
         return DB::$prefix. 'sai_context';
     }
     
-    static public function add(string $user_id, string $dialog_id, string $role, string $content) : static {
+    static public function add(string $user_id, string $dialog_id, string $role, string $content, string $tool_call_id=null) : static {
         
-        $me = new Context();
+        $me = new static();
         $me->user_id = $user_id;
         $me->dialog_id = $dialog_id;
         $me->role = $role;
         $me->content = $content;
+        $me->tool_call_id = $tool_call_id;
         $me->date_time = date_create();
         $me->write();
         
