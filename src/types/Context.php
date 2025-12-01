@@ -11,7 +11,8 @@ class Context extends AbstractCollection {
     const FILTER_ASSISTANT = 2;
     const FILTER_SYSTEM = 4;
     const FILTER_TOOL = 8;
-    const FILTER_ALL = 15;
+    const FILTER_ERROR = 16;
+    const FILTER_ALL = 255;
     
     #[\Override]
     protected function getAllowedTypes(): array {
