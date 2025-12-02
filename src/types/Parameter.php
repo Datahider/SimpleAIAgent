@@ -5,7 +5,7 @@ namespace losthost\SimpleAI\types;
 class Parameter {
     
     const TYPE_INT = 'integer';
-    const TYPE_STRINT = 'string';
+    const TYPE_STRING = 'string';
     const TYPE_FLOAT = 'float';
     
     protected string $type;

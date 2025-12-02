@@ -26,7 +26,7 @@ class SimpleAIFunction extends AbstractAITool {
     public function getParameters(): Parameters {
         return Parameters::create([
             Parameter::create(Parameter::TYPE_INT, 'random_int', 'Случайное цело число в диапазоне от 0 до 999. Придумай его сам любое при вызове этой функции', true),
-            Parameter::create(Parameter::TYPE_STRINT, 'text', 'Передавай сюда текст для тестирования, который попросит пользователь (если попросит)'),
+            Parameter::create(Parameter::TYPE_STRING, 'text', 'Передавай сюда текст для тестирования, который попросит пользователь (если попросит)'),
         ]);
     }
 
