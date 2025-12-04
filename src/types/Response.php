@@ -55,6 +55,10 @@ class Response {
                 && !empty($this->data->choices[0]->message->content);
     }
     
+    public function getFinishReason() : string {
+        return $this->data->choices[0]->finish_reason ?? 'error';
+    }
+    
     public function hasToolCall() : bool {
         return !empty($this->data->choices)
                 && !empty($this->data->choices[0])

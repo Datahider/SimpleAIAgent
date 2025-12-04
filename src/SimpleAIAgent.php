@@ -17,6 +17,7 @@ class SimpleAIAgent {
 
     const DEFAULT_PROMPT = '';
     const DEFAULT_TEMPERATURE = 1.0;
+    const DEFAULT_MAX_TOKENS = 4096;
     const DEFAULT_TIMEOUT = 30;
     
     protected string $deepseek_api_key;
@@ -29,6 +30,8 @@ class SimpleAIAgent {
     
     protected string $prompt;
     protected float $temperature;
+    protected int $max_tokens;
+    
     protected Tools $tools;
 
 
@@ -38,6 +41,7 @@ class SimpleAIAgent {
         $this->timeout = static::DEFAULT_TIMEOUT;
         $this->prompt = static::DEFAULT_PROMPT;
         $this->temperature = static::DEFAULT_TEMPERATURE;
+        $this->max_tokens = static::DEFAULT_MAX_TOKENS;
         $this->dialog_id = '';
         $this->agent_name = '';
         $this->tools = Tools::create();
@@ -70,6 +74,14 @@ class SimpleAIAgent {
         return $this->temperature;
     }
 
+    public function setMaxTokens(int $max_tokens) : static {
+        $this->max_tokens = $max_tokens;
+        return $this;
+    }
+    
+    public function getMaxTokens() : int {
+        return $this->max_tokens;
+    }
     public function setUserId(string $user_id) : static {
         $this->user_id = $user_id;
         return $this;
@@ -146,6 +158,7 @@ class SimpleAIAgent {
 
         if ($response->hasContent()) {
             $new->add(ContextItem::create($response->getContent(), ContextItem::ROLE_ASSISTANT));
+            error_log($response->getContent());
         }
         
         if ($response->hasToolCall()) {
@@ -154,7 +167,7 @@ class SimpleAIAgent {
                 $handler = AbstractAITool::getHandler($tool_call->getName());
                 $result = $handler->execute($tool_call->getArgs());
                 $new->add(ContextItem::create($result->getResult(), ContextItem::ROLE_TOOL, $tool_call->getId()));
-                error_log('Рекурсивный вызов processContext()');
+                error_log('Рекурсивный вызов processContext() для обработки результата функции');
                 $this->processContext($history, $new);
             }
         }
@@ -164,7 +177,8 @@ class SimpleAIAgent {
     protected function postQuery(Context $context) : Response {
 
         $agent = DeepSeekClient::build(apiKey: $this->deepseek_api_key, timeout: $this->timeout)
-                ->setTemperature($this->getTemperature());
+                ->setTemperature($this->getTemperature())
+                ->setMaxTokens($this->getMaxTokens());
         
         foreach ($context->asArray() as $context_item) {
             if ($context_item->getToolCallId()) {
@@ -199,6 +213,15 @@ class SimpleAIAgent {
         }
     }
     
+    protected function getContextView(string $user_id, string $dialog_id) : DBView {
+        return new DBView(<<<FIN
+                SELECT role, content, tool_call_id 
+                FROM [sai_context] 
+                WHERE user_id = ? AND dialog_id = ? 
+                ORDER BY id
+                FIN, [$user_id, $dialog_id]);
+    }
+    
     protected function getContext($query) : Context {
         
         if (!$this->hasContext()) {
@@ -209,12 +232,7 @@ class SimpleAIAgent {
             DBContext::add($this->user_id, $this->dialog_id, 'user', $query);
         } // Пустой ввод не добавляем в контекст
         
-        $context_view = new DBView(<<<FIN
-                SELECT role, content, tool_call_id 
-                FROM [sai_context] 
-                WHERE user_id = ? AND dialog_id = ? 
-                ORDER BY id
-                FIN, [$this->user_id, $this->dialog_id]);
+        $context_view = $this->getContextView($this->user_id, $this->dialog_id);
         
         $context = new Context();
         while ($context_view->next()) {

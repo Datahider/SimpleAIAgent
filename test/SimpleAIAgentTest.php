@@ -32,10 +32,32 @@ class SimpleAIAgentTest extends TestCase
         $agent = SimpleAIAgent::build(self::$api_key)
             ->setTimeout(60);
         
-        $response = $agent->ask('Скажи коротко "Тест пройден"');
+        $response = $agent->ask('Скажи коротко "Тест пройден"')->asString();
         $this->assertStringContainsString('Тест', $response);
     }
 
+    public function testMaxTokensLimit()
+    {
+        $agent = SimpleAIAgent::build(self::$api_key)
+            ->setTimeout(60)
+            ->setUserId(100)
+            ->setDialogId(2)
+            ->setMaxTokens(100); // Устанавливаем маленький лимит
+
+        // Запрашиваем что-то длинное
+        //$response = $agent->ask('Напиши подробное эссе о философии искусственного интеллекта, сравнивая подходы Тьюринга, Шеннона и современных исследователей машинного обучения. Обязательно включи анализ этических аспектов и будущих перспектив развития ИИ.')->asString();
+        $response = $agent->ask('Сколько существует часовых поясов?')->asString();
+        
+        error_log("ANSWER 1: $response");
+        // Проверяем, что ответ не слишком длинный
+//        $this->assertLessThan(500, strlen($response), 'Ответ должен быть ограничен 100 токенами');
+
+        $response2 = $agent->ask('...')->asString();
+        error_log("ANSWER 2: $response2");
+        // Или проверяем finish_reason если он доступен
+        // $this->assertStringContainsString('length', $response->finish_reason ?? '');
+    }
+    
     public function testPrompt()
     {
         $agent = SimpleAIAgent::build(self::$api_key)
@@ -59,7 +81,7 @@ class SimpleAIAgentTest extends TestCase
         $agent = SimpleAIAgent::build('invalid_key')
             ->setTimeout(5);
         
-        $result = $agent->ask('test', 'Ошибка перехвачена');
+        $result = $agent->ask('test', 'Ошибка перехвачена')->asString();
         $this->assertEquals('Ошибка перехвачена', $result);
     }
 
@@ -70,7 +92,7 @@ class SimpleAIAgentTest extends TestCase
         
         $result = $agent->ask('test', function($ex) {
             return "Callback: " . get_class($ex);
-        });
+        })->asString();
         
         $this->assertStringContainsString('Callback:', $result);
     }
@@ -107,10 +129,10 @@ class SimpleAIAgentTest extends TestCase
             ->setTimeout(60);
         
         // Первый запрос
-        $response1 = $agent->ask('Столица Англии');
+        $response1 = $agent->ask('Столица Англии')->asString();
         
         // Второй запрос - должен помнить контекст
-        $response2 = $agent->ask('Повтори ответ');
+        $response2 = $agent->ask('Повтори ответ')->asString();
         
         $this->assertIsString($response1);
         $this->assertIsString($response2);

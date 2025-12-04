@@ -15,7 +15,7 @@ class DBContext extends DBObject {
         'content' => 'TEXT',
         'date_time' => 'DATETIME NOT NULL',
         'PRIMARY KEY' => 'id',
-        'INDEX USER_DIALOG' => ['user_id', 'dialog_id']
+        'UNIQUE INDEX USER_DIALOG_ROLE_ID' => ['user_id', 'dialog_id', 'role', 'id'],
     ];
     
     public static function tableName() {
