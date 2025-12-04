@@ -158,7 +158,6 @@ class SimpleAIAgent {
 
         if ($response->hasContent()) {
             $new->add(ContextItem::create($response->getContent(), ContextItem::ROLE_ASSISTANT));
-            error_log($response->getContent());
         }
         
         if ($response->hasToolCall()) {
@@ -167,7 +166,6 @@ class SimpleAIAgent {
                 $handler = AbstractAITool::getHandler($tool_call->getName());
                 $result = $handler->execute($tool_call->getArgs());
                 $new->add(ContextItem::create($result->getResult(), ContextItem::ROLE_TOOL, $tool_call->getId()));
-                error_log('Рекурсивный вызов processContext() для обработки результата функции');
                 $this->processContext($history, $new);
             }
         }
