@@ -53,7 +53,8 @@ class Context extends AbstractCollection {
             self::FILTER_USER => 'user',
             self::FILTER_ASSISTANT => 'assistant',
             self::FILTER_SYSTEM => 'system',
-            self::FILTER_TOOL => 'tool'
+            self::FILTER_TOOL => 'tool',
+            self::FILTER_ERROR => 'error',
         ];
         
         $result = [];

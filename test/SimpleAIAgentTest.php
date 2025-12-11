@@ -5,6 +5,7 @@ namespace losthost\SimpleAI\Test;
 use PHPUnit\Framework\TestCase;
 use losthost\SimpleAI\SimpleAIAgent;
 use losthost\SimpleAI\data\DBContext;
+use losthost\SimpleAI\types\Context;
 use losthost\DB\DB;
 
 class SimpleAIAgentTest extends TestCase
@@ -81,7 +82,7 @@ class SimpleAIAgentTest extends TestCase
         $agent = SimpleAIAgent::build('invalid_key')
             ->setTimeout(5);
         
-        $result = $agent->ask('test', 'Ошибка перехвачена')->asString();
+        $result = $agent->ask('test', 'Ошибка перехвачена')->asString(Context::FILTER_ASSISTANT|Context::FILTER_ERROR);
         $this->assertEquals('Ошибка перехвачена', $result);
     }
 
