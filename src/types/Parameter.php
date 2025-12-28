@@ -7,6 +7,7 @@ class Parameter {
     const TYPE_INT = 'integer';
     const TYPE_STRING = 'string';
     const TYPE_FLOAT = 'float';
+    const TYPE_BOOL = 'bool';
     
     protected string $type;
     protected string $name;
