@@ -9,7 +9,7 @@ class DBStatistics extends DBObject {
     
     const METADATA = [
         'id' => 'BIGINT NOT NULL AUTO_INCREMENT',
-        'external_id' => 'VARCHAR(36) NOT NULL',
+        'external_id' => 'VARCHAR(100) NOT NULL',
         'created' => 'DATETIME NOT NULL',
         'user_id' => 'VARCHAR(50)',
         'dialog_id' => 'VARCHAR(50)',
